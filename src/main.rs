@@ -5,12 +5,10 @@ use axum::{
     routing::get,
     Router,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 enum Message {
-    Key(String),
-    Value(String),
-    Sender(mpsc::Sender<Message>),
+    GetValue(String, oneshot::Sender<String>),
 }
 
 #[tokio::main]
@@ -32,16 +30,11 @@ async fn main() {
 }
 
 async fn get_key(Path(param): Path<String>, State(sender): State<mpsc::Sender<Message>>) -> String {
-    let (tx, mut rx) = mpsc::channel(32);
-    sender.send(Message::Key(param)).await;
-    sender.send(Message::Sender(tx)).await;
-    if let Some(msg) = rx.recv().await {
-        match msg {
-            Message::Value(v) => v.to_string(),
-            _ => "".to_string(),
-        }
-    } else {
-        "".to_string()
+    let (tx, rx) = oneshot::channel();
+    sender.send(Message::GetValue(param, tx)).await;
+    match rx.await {
+        Ok(v) => v.to_string(),
+        Err(_) => panic!(),
     }
 }
 
@@ -49,13 +42,11 @@ async fn store_keys(mut reciever: mpsc::Receiver<Message>, db: HashMap<String, S
     let mut value = "".to_string();
     while let Some(msg) = reciever.recv().await {
         match msg {
-            Message::Key(k) => {
-                value = db.get(&k).unwrap().to_string();
+            Message::GetValue(key, tx) => {
+                value = db.get(&key).unwrap().to_string();
+                tx.send(value.clone());
             }
-            Message::Sender(tx) => {
-                tx.send(Message::Value(value.clone())).await;
-            }
-            _ => (),
+            _ => panic!(),
         }
     }
 }
