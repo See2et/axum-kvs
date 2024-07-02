@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 axum = "0.7.5"
 hyper = "1.4.0"
-tokio = "1.38.0"
+sled = "0.34.7"
+tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread"] }
